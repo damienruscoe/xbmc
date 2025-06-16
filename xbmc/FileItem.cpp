@@ -990,7 +990,7 @@ bool CFileItem::IsPicture() const
     return false;
 
   if (!m_strPath.empty())
-    return CUtil::IsPicture(m_strPath);
+    return GetURLRef().IsPicture();
 
   return false;
 }
@@ -1042,35 +1042,32 @@ bool CFileItem::IsLibraryFolder() const
   if (HasProperty("library.filter") && GetProperty("library.filter").asBoolean())
     return true;
 
-  return URIUtils::IsLibraryFolder(m_strPath);
+  return GetURLRef().IsLibraryFolder();
 }
 
 bool CFileItem::IsPythonScript() const
 {
-  return URIUtils::HasExtension(m_strPath, ".py");
+  return GetURLRef().HasExtension(".py");
 }
 
 bool CFileItem::IsType(const char *ext) const
 {
-  if (!m_strDynPath.empty())
-    return URIUtils::HasExtension(m_strDynPath, ext);
-
-  return URIUtils::HasExtension(m_strPath, ext);
+  return GetDynURLRef().HasExtension(ext);
 }
 
 bool CFileItem::IsNFO() const
 {
-  return URIUtils::HasExtension(m_strPath, ".nfo");
+  return GetURLRef().HasExtension(".nfo");
 }
 
 bool CFileItem::IsDiscImage() const
 {
-  return URIUtils::IsDiscImage(GetDynPath());
+  return GetDynURLRef().IsDiscImage();
 }
 
 bool CFileItem::IsOpticalMediaFile() const
 {
-  return URIUtils::IsOpticalMediaFile(GetDynPath());
+  return GetDynURLRef().IsOpticalMediaFile();
 }
 
 bool CFileItem::IsRAR() const
@@ -1080,69 +1077,69 @@ bool CFileItem::IsRAR() const
 
 bool CFileItem::IsAPK() const
 {
-  return URIUtils::IsAPK(m_strPath);
+  return GetURLRef().IsAPK();
 }
 
 bool CFileItem::IsZIP() const
 {
-  return URIUtils::IsZIP(m_strPath);
+  return GetURLRef().IsZIP();
 }
 
 bool CFileItem::IsCBZ() const
 {
-  return URIUtils::HasExtension(m_strPath, ".cbz");
+  return GetURLRef().IsCBZ();
 }
 
 bool CFileItem::IsCBR() const
 {
-  return URIUtils::HasExtension(m_strPath, ".cbr");
+  return GetURLRef().IsCBR();
 }
 
 bool CFileItem::IsRSS() const
 {
-  return StringUtils::StartsWithNoCase(m_strPath, "rss://") || URIUtils::HasExtension(m_strPath, ".rss")
-      || StringUtils::StartsWithNoCase(m_strPath, "rsss://")
-      || m_mimetype == "application/rss+xml";
+  auto& curl = GetURLRef();
+  return curl.IsProtocol("rss") || curl.HasExtension(".rss") || curl.IsProtocol("rsss") ||
+         m_mimetype == "application/rss+xml";
 }
 
 bool CFileItem::IsAndroidApp() const
 {
-  return URIUtils::IsAndroidApp(m_strPath);
+  return GetURLRef().IsAndroidApp();
 }
 
 bool CFileItem::IsStack() const
 {
-  return URIUtils::IsStack(GetDynPath());
+  return GetURLRef().IsStack();
 }
 
 bool CFileItem::IsFavourite() const
 {
-  return URIUtils::IsFavourite(m_strPath);
+  return GetURLRef().IsFavourite();
 }
 
 bool CFileItem::IsPlugin() const
 {
-  return URIUtils::IsPlugin(m_strPath);
+  return GetURLRef().IsPlugin();
 }
 
 bool CFileItem::IsScript() const
 {
-  return URIUtils::IsScript(m_strPath);
+  return GetURLRef().IsScript();
 }
 
 bool CFileItem::IsAddonsPath() const
 {
-  return URIUtils::IsAddonsPath(m_strPath);
+  return GetURLRef().IsAddonsPath();
 }
 
 bool CFileItem::IsSourcesPath() const
 {
-  return URIUtils::IsSourcesPath(m_strPath);
+  return GetURLRef().IsSourcesPath();
 }
 
 bool CFileItem::IsMultiPath() const
 {
-  return URIUtils::IsMultiPath(m_strPath);
+  return GetURLRef().IsMultiPath();
 }
 
 bool CFileItem::IsBluray() const
@@ -1168,7 +1165,7 @@ bool CFileItem::IsNfs() const
 
 bool CFileItem::IsISO9660() const
 {
-  return URIUtils::IsISO9660(m_strPath);
+  return GetURLRef().IsISO9660();
 }
 
 bool CFileItem::IsSmb() const
@@ -1178,7 +1175,7 @@ bool CFileItem::IsSmb() const
 
 bool CFileItem::IsURL() const
 {
-  return URIUtils::IsURL(m_strPath);
+  return GetURLRef().IsURL();
 }
 
 bool CFileItem::IsPVR() const
@@ -1290,13 +1287,13 @@ void CFileItem::FillInMimeType(bool lookup /*= true*/)
       if (!lookup)
         return;
 
-      CCurlFile::GetMimeType(GetDynURL(), m_mimetype);
+      CCurlFile::GetMimeType(GetDynURLRef(), m_mimetype);
 
       // try to get mime-type again but with an NSPlayer User-Agent
       // in order for server to provide correct mime-type.  Allows us
       // to properly detect an MMS stream
       if (StringUtils::StartsWithNoCase(m_mimetype, "video/x-ms-"))
-        CCurlFile::GetMimeType(GetDynURL(), m_mimetype, "NSPlayer/11.00.6001.7000");
+        CCurlFile::GetMimeType(GetDynURLRef(), m_mimetype, "NSPlayer/11.00.6001.7000");
 
       // make sure there are no options set in mime-type
       // mime-type can look like "video/x-ms-asf ; charset=utf8"
@@ -1730,6 +1727,13 @@ const CURL CFileItem::GetURL() const
   return url;
 }
 
+const CURL CFileItem::GetURLRef() const
+{
+  // Filler function, to be replaced with implementation from
+  // https://github.com/xbmc/xbmc/pull/26873
+  return GetURL();
+}
+
 bool CFileItem::IsURL(const CURL& url) const
 {
   return IsPath(url.Get());
@@ -1757,6 +1761,13 @@ const CURL CFileItem::GetDynURL() const
     CURL url(m_strPath);
     return url;
   }
+}
+
+const CURL CFileItem::GetDynURLRef() const
+{
+  // Filler function, to be replaced with implementation from
+  // https://github.com/xbmc/xbmc/pull/26873
+  return GetDynURL();
 }
 
 const std::string &CFileItem::GetDynPath() const
