@@ -63,17 +63,6 @@ namespace ANNOUNCEMENT
     static const std::string ANNOUNCEMENT_SENDER;
 
   protected:
-    void Process() override;
-    void DoAnnounce(AnnouncementFlag flag,
-                    const std::string& sender,
-                    const std::string& message,
-                    const std::shared_ptr<CFileItem>& item,
-                    const CVariant& data);
-    void DoAnnounce(AnnouncementFlag flag,
-                    const std::string& sender,
-                    const std::string& message,
-                    const CVariant& data);
-
     struct CAnnounceData
     {
       AnnouncementFlag flag;
@@ -82,6 +71,10 @@ namespace ANNOUNCEMENT
       std::shared_ptr<CFileItem> item;
       CVariant data;
     };
+
+    void Process() override;
+    void DoAnnounce(const CAnnounceData& announcement);
+
     std::list<CAnnounceData> m_announcementQueue;
     CEvent m_queueEvent;
 

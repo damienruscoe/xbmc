@@ -341,13 +341,10 @@ void CAnnouncementManager::Announce(AnnouncementFlag flag,
   m_queueEvent.Set();
 }
 
-void CAnnouncementManager::DoAnnounce(AnnouncementFlag flag,
-                                      const std::string& sender,
-                                      const std::string& message,
-                                      const CVariant& data)
+void CAnnouncementManager::DoAnnounce(const CAnnounceData& announcement)
 {
-  CLog::Log(LOGDEBUG, LOGANNOUNCE, "CAnnouncementManager - Announcement: {} from {}", message,
-            sender);
+  CLog::Log(LOGDEBUG, LOGANNOUNCE, "CAnnouncementManager - Announcement: {} from {}",
+            announcement.message, announcement.sender);
 
   std::unique_lock lock(m_announcersCritSection);
 
@@ -355,23 +352,10 @@ void CAnnouncementManager::DoAnnounce(AnnouncementFlag flag,
   std::unordered_map<IAnnouncer*, int> announcers{m_announcers};
   for (const auto& [announcer, flagMask] : announcers)
   {
-    if (flag & flagMask)
-    {
-      announcer->Announce(flag, sender, message, data);
-    }
+    if ((announcement.flag & flagMask) != 0)
+      announcer->Announce(announcement.flag, announcement.sender, announcement.message,
+                          announcement.data);
   }
-}
-
-void CAnnouncementManager::DoAnnounce(AnnouncementFlag flag,
-                                      const std::string& sender,
-                                      const std::string& message,
-                                      const std::shared_ptr<CFileItem>& item,
-                                      const CVariant& data)
-{
-  if (item == nullptr)
-    DoAnnounce(flag, sender, message, data);
-  else
-    DoAnnounce(flag, sender, message, CreateDataObjectFromItem(*item, data));
 }
 
 void CAnnouncementManager::Process()
@@ -387,8 +371,11 @@ void CAnnouncementManager::Process()
       m_announcementQueue.pop_front();
       {
         CSingleExit ex(m_queueCritSection);
-        DoAnnounce(announcement.flag, announcement.sender, announcement.message, announcement.item,
-                   announcement.data);
+
+        if (announcement.item != nullptr)
+          announcement.data = CreateDataObjectFromItem(*announcement.item, announcement.data);
+
+        DoAnnounce(announcement);
       }
     }
     else
