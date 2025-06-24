@@ -50,8 +50,11 @@ void CopyPVRTagInfoToObject(const PVR::CPVRChannel& channel, bool copyPlayerId, 
   objItem["id"] = channel.ChannelID();
 }
 
-void CopyVideoTagInfoToObject(CFileItem& item, CVariant& object)
+void CopyVideoTagInfoToObject(const CFileItem& constItem, CVariant& object)
 {
+  /* Create a copy so we have a mutable item */
+  CFileItem item = constItem;
+
   CVideoInfoTag& tag = *item.GetVideoInfoTag();
 
   auto& objItem = object["item"];
@@ -134,8 +137,11 @@ void CopyVideoTagInfoToObject(CFileItem& item, CVariant& object)
   }
 }
 
-void CopyMusicTagInfoToObject(CFileItem& item, CVariant& object)
+void CopyMusicTagInfoToObject(const CFileItem& constItem, CVariant& object)
 {
+  /* Create a copy so we have a mutable item */
+  CFileItem item = constItem;
+
   MUSIC_INFO::CMusicInfoTag& tag = *item.GetMusicInfoTag();
 
   auto& objItem = object["item"];
@@ -187,7 +193,7 @@ void CopyMusicTagInfoToObject(CFileItem& item, CVariant& object)
   }
 }
 
-CVariant CreateDataObjectFromItem(CFileItem& item, const CVariant& data)
+CVariant CreateDataObjectFromItem(const CFileItem& item, const CVariant& data)
 {
   CVariant object;
   if (data.isNull() || data.isObject())
@@ -329,10 +335,11 @@ void CAnnouncementManager::Announce(AnnouncementFlag flag,
   announcement.flag = flag;
   announcement.sender = sender;
   announcement.message = message;
-  announcement.data = data;
 
   if (item != nullptr)
-    announcement.item = std::make_shared<CFileItem>(*item);
+    announcement.data = CreateDataObjectFromItem(*item, data);
+  else
+    announcement.data = data;
 
   {
     std::unique_lock lock(m_queueCritSection);
@@ -371,10 +378,6 @@ void CAnnouncementManager::Process()
       m_announcementQueue.pop_front();
       {
         CSingleExit ex(m_queueCritSection);
-
-        if (announcement.item != nullptr)
-          announcement.data = CreateDataObjectFromItem(*announcement.item, announcement.data);
-
         DoAnnounce(announcement);
       }
     }

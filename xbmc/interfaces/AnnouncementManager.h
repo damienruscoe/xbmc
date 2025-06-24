@@ -68,7 +68,6 @@ namespace ANNOUNCEMENT
       AnnouncementFlag flag;
       std::string sender;
       std::string message;
-      std::shared_ptr<CFileItem> item;
       CVariant data;
     };
 
