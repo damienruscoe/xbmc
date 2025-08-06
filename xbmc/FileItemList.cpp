@@ -151,6 +151,22 @@ void CFileItemList::Add(CFileItem&& item)
   m_items.emplace_back(std::move(ptr));
 }
 
+void CFileItemList::AddItems(const std::vector<CFileItemPtr>& items)
+{
+  std::unique_lock lock(m_lock);
+
+  for (const auto& pItem : items)
+  {
+    if (m_fastLookup)
+    {
+      m_map.try_emplace(m_ignoreURLOptions ? CURL(pItem->GetPath()).GetWithoutOptions()
+                                           : pItem->GetPath(),
+                        pItem);
+    }
+    m_items.emplace_back(pItem);
+  }
+}
+
 void CFileItemList::AddFront(const CFileItemPtr& pItem, int itemPosition)
 {
   std::unique_lock lock(m_lock);

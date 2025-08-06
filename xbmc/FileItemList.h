@@ -46,6 +46,7 @@ public:
   void Add(CFileItemPtr item);
   void Add(CFileItem&& item);
   void AddFront(const CFileItemPtr& pItem, int itemPosition);
+  void AddItems(const std::vector<CFileItemPtr>& items);
   void Remove(const CFileItem* pItem);
   void Remove(int iItem);
   CFileItemPtr Get(int iItem) const;

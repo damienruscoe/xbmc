@@ -25,9 +25,11 @@
 #endif
 
 using namespace XFILE;
+#include <algorithm>
 #include <limits.h>
-#include <nfsc/libnfs.h>
+
 #include <nfsc/libnfs-raw-nfs.h>
+#include <nfsc/libnfs.h>
 
 #if defined(TARGET_WINDOWS)
 #define S_IFLNK 0120000
@@ -40,6 +42,27 @@ using namespace XFILE;
 #define S_ISREG(m) ((m & _S_IFREG) != 0)
 #endif
 
+namespace {
+
+KODI::TIME::FileTime GetDirEntryTime(struct nfsdirent* dirent)
+{
+  // if modification date is missing, use create date
+  const int64_t lTimeDate =
+      (dirent->mtime.tv_sec == 0) ? dirent->ctime.tv_sec : dirent->mtime.tv_sec;
+
+  KODI::TIME::FileTime fileTime, localTime;
+  long long ll = lTimeDate & 0xffffffff;
+  ll *= 10000000ll;
+  ll += 116444736000000000ll;
+  fileTime.lowDateTime = (DWORD)(ll & 0xffffffff);
+  fileTime.highDateTime = (DWORD)(ll >> 32);
+  KODI::TIME::FileTimeToLocalFileTime(&fileTime, &localTime);
+
+  return localTime;
+}
+
+} // Anon namespace
+
 CNFSDirectory::CNFSDirectory(void)
 {
   gNfsConnection.AddActiveConnection();
@@ -50,19 +73,21 @@ CNFSDirectory::~CNFSDirectory(void)
   gNfsConnection.AddIdleConnection();
 }
 
-bool CNFSDirectory::GetDirectoryFromExportList(const std::string& strPath, CFileItemList &items)
+bool CNFSDirectory::GetDirectoryFromExportList(const CURL& url, CFileItemList& items)
 {
-  CURL url(strPath);
-  std::string nonConstStrPath(strPath);
-  std::list<std::string> exportList=gNfsConnection.GetExportList(url);
+  std::string strPath(url.Get());
+  URIUtils::AddSlashAtEnd(strPath); //be sure the dir ends with a slash
+
+  CURL url2(strPath);
+  std::list<std::string> exportList = gNfsConnection.GetExportList(url2);
 
   for (const std::string& it : exportList)
   {
     const std::string& currentExport(it);
-    URIUtils::RemoveSlashAtEnd(nonConstStrPath);
+    URIUtils::RemoveSlashAtEnd(strPath);
 
     CFileItemPtr pItem(new CFileItem(currentExport));
-    std::string path(nonConstStrPath + currentExport);
+    std::string path(strPath + currentExport);
     URIUtils::AddSlashAtEnd(path);
     pItem->SetPath(path);
     pItem->SetDateTime(0);
@@ -99,30 +124,31 @@ bool CNFSDirectory::GetServerList(CFileItemList &items)
   return ret;
 }
 
-bool CNFSDirectory::ResolveSymlink( const std::string &dirName, struct nfsdirent *dirent, CURL &resolvedUrl)
+bool CNFSDirectory::ResolveSymlink(std::string dirName,
+                                   struct nfsdirent* dirent,
+                                   std::string& resolvedUrlPath)
 {
   std::unique_lock lock(gNfsConnection);
   int ret = 0;
   bool retVal = true;
-  std::string fullpath = dirName;
-  char resolvedLink[MAX_PATH];
 
-  URIUtils::AddSlashAtEnd(fullpath);
+  URIUtils::AddSlashAtEnd(dirName);
+
+  std::string fullpath = dirName;
   fullpath.append(dirent->name);
 
-  resolvedUrl.Reset();
-  resolvedUrl.SetPort(2049);
-  resolvedUrl.SetProtocol("nfs");
-  resolvedUrl.SetHostName(gNfsConnection.GetConnectedIp());
+  char resolvedLink[MAX_PATH];
 
   ret = nfs_readlink(gNfsConnection.GetNfsContext(), fullpath.c_str(), resolvedLink, MAX_PATH);
 
   if(ret == 0)
   {
     nfs_stat_64 tmpBuffer = {};
-    fullpath = dirName;
-    URIUtils::AddSlashAtEnd(fullpath);
-    fullpath.append(resolvedLink);
+
+    CURL resolvedUrl;
+    resolvedUrl.SetProtocol("nfs");
+    resolvedUrl.SetHostName(gNfsConnection.GetConnectedIp());
+    resolvedUrl.SetPort(2049);
 
     //special case - if link target is absolute it could be even another export
     //intervolume symlinks baby ...
@@ -138,9 +164,13 @@ bool CNFSDirectory::ResolveSymlink( const std::string &dirName, struct nfsdirent
     }
     else
     {
+      fullpath = dirName;
+      fullpath.append(resolvedLink);
+
       ret = nfs_stat64(gNfsConnection.GetNfsContext(), fullpath.c_str(), &tmpBuffer);
       resolvedUrl.SetFileName(gNfsConnection.GetConnectedExport() + fullpath);
     }
+    resolvedUrlPath = resolvedUrl.Get();
 
     if (ret != 0)
     {
@@ -194,118 +224,81 @@ bool CNFSDirectory::ResolveSymlink( const std::string &dirName, struct nfsdirent
               nfs_get_error(gNfsConnection.GetNfsContext()));
     retVal = false;
   }
+
   return retVal;
 }
 
 bool CNFSDirectory::GetDirectory(const CURL& url, CFileItemList &items)
 {
   // We accept nfs://server/path[/file]]]]
-  int ret = 0;
-  KODI::TIME::FileTime fileTime, localTime;
   std::unique_lock lock(gNfsConnection);
-  std::string strDirName="";
-  std::string myStrPath(url.Get());
-  URIUtils::AddSlashAtEnd(myStrPath); //be sure the dir ends with a slash
 
-  if(!gNfsConnection.Connect(url,strDirName))
+  std::string path = "";
+  if (!gNfsConnection.Connect(url, path))
   {
     //connect has failed - so try to get the exported filesystems if no path is given to the url
     if(url.GetShareName().empty())
     {
-      if(url.GetHostName().empty())
-      {
+      if (url.GetHostName().empty())
         return GetServerList(items);
-      }
       else
-      {
-        return GetDirectoryFromExportList(myStrPath, items);
-      }
+        return GetDirectoryFromExportList(url, items);
     }
     else
-    {
       return false;
-    }
   }
 
   struct nfsdir *nfsdir = NULL;
-  struct nfsdirent *nfsdirent = NULL;
+  int ret = nfs_opendir(gNfsConnection.GetNfsContext(), path.c_str(), &nfsdir);
 
-  ret = nfs_opendir(gNfsConnection.GetNfsContext(), strDirName.c_str(), &nfsdir);
-
-  if(ret != 0)
+  if (ret != 0)
   {
-    CLog::Log(LOGERROR, "Failed to open({}) {}", strDirName,
+    CLog::Log(LOGERROR, "Failed to open({}) {}", path,
               nfs_get_error(gNfsConnection.GetNfsContext()));
     return false;
   }
   lock.unlock();
 
-  while((nfsdirent = nfs_readdir(gNfsConnection.GetNfsContext(), nfsdir)) != NULL)
+  std::string linkUrl{};
+  std::string itemPath{};
+  std::string urlDirPath{url.Get()};
+  URIUtils::AddSlashAtEnd(urlDirPath); //be sure the dir ends with a slash
+
+  const std::vector<std::string> exclusions = {".", "..", "lost+found"};
+  const auto notExcluded = exclusions.end();
+
+  std::vector<CFileItemPtr> fileItems;
+  struct nfsdirent* dirent = NULL;
+  while ((dirent = nfs_readdir(gNfsConnection.GetNfsContext(), nfsdir)) != NULL)
   {
-    struct nfsdirent tmpDirent = *nfsdirent;
-    std::string strName = tmpDirent.name;
-    std::string path(myStrPath + strName);
-    int64_t iSize = 0;
-    bool bIsDir = false;
-    int64_t lTimeDate = 0;
+    // Resolve symlinks
+    // ResolveSymlink changes dirent
+    const bool isSymLink = dirent->type == NF3LNK;
+    if (isSymLink && !ResolveSymlink(path, dirent, linkUrl))
+      continue;
 
-    //resolve symlinks
-    if(tmpDirent.type == NF3LNK)
+    const std::string name{dirent->name};
+    if (std::ranges::find(exclusions, name) == notExcluded)
     {
-      CURL linkUrl;
-      //resolve symlink changes tmpDirent and strName
-      if(!ResolveSymlink(strDirName,&tmpDirent,linkUrl))
-      {
-        continue;
-      }
+      const bool isDir = dirent->type == NF3DIR;
+      std::string itemPath = isSymLink ? linkUrl : (urlDirPath + name);
 
-      path = linkUrl.Get();
-    }
+      if (isDir)
+        URIUtils::AddSlashAtEnd(itemPath);
 
-    iSize = tmpDirent.size;
-    bIsDir = tmpDirent.type == NF3DIR;
-    lTimeDate = tmpDirent.mtime.tv_sec;
-
-    if (!StringUtils::EqualsNoCase(strName,".") && !StringUtils::EqualsNoCase(strName,"..")
-        && !StringUtils::EqualsNoCase(strName,"lost+found"))
-    {
-      if(lTimeDate == 0) // if modification date is missing, use create date
-      {
-        lTimeDate = tmpDirent.ctime.tv_sec;
-      }
-
-      long long ll = lTimeDate & 0xffffffff;
-      ll *= 10000000ll;
-      ll += 116444736000000000ll;
-      fileTime.lowDateTime = (DWORD)(ll & 0xffffffff);
-      fileTime.highDateTime = (DWORD)(ll >> 32);
-      KODI::TIME::FileTimeToLocalFileTime(&fileTime, &localTime);
-
-      CFileItemPtr pItem(new CFileItem(tmpDirent.name));
-      pItem->SetDateTime(localTime);
-      pItem->SetSize(iSize);
-
-      if (bIsDir)
-      {
-        URIUtils::AddSlashAtEnd(path);
-        pItem->SetFolder(true);
-      }
-      else
-      {
-        pItem->SetFolder(false);
-      }
-
-      if (strName[0] == '.')
-      {
+      CFileItemPtr& pItem = fileItems.emplace_back(new CFileItem(name));
+      pItem->SetPath(itemPath);
+      pItem->SetDateTime(GetDirEntryTime(dirent));
+      pItem->SetSize(dirent->size);
+      pItem->SetFolder(isDir);
+      if (name[0] == '.')
         pItem->SetProperty("file:hidden", true);
-      }
-      pItem->SetPath(path);
-      items.Add(pItem);
     }
   }
+  items.AddItems(fileItems);
 
   lock.lock();
-  nfs_closedir(gNfsConnection.GetNfsContext(), nfsdir);//close the dir
+  nfs_closedir(gNfsConnection.GetNfsContext(), nfsdir); //close the dir
   lock.unlock();
   return true;
 }
