@@ -92,7 +92,7 @@ std::vector<std::shared_ptr<CFileItem>> CNFSDirectory::GetDirectoryFromExportLis
     URIUtils::AddSlashAtEnd(path);
 
     auto& item = fileItems.emplace_back(std::make_shared<CFileItem>(currentExport));
-    item->SetPath(path);
+    item->SetPath(std::move(path));
     item->SetDateTime(0);
     item->SetFolder(true);
   }
@@ -111,7 +111,7 @@ std::vector<std::shared_ptr<CFileItem>> CNFSDirectory::GetServerList()
     URIUtils::AddSlashAtEnd(path);
 
     auto& item = fileItems.emplace_back(std::make_shared<CFileItem>(serverAddress));
-    item->SetPath(path);
+    item->SetPath(std::move(path));
     item->SetDateTime(0);
     item->SetFolder(true);
   }
@@ -274,7 +274,7 @@ bool CNFSDirectory::GetDirectory(const CURL& url, CFileItemList &items)
       URIUtils::AddSlashAtEnd(path);
 
     auto& item = fileItems.emplace_back(std::make_shared<CFileItem>(name));
-    item->SetPath(path);
+    item->SetPath(std::move(path));
     item->SetDateTime(GetDirEntryTime(dirent));
     item->SetFolder(isDir);
     item->SetSize(dirent->size);

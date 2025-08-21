@@ -9008,10 +9008,8 @@ bool CVideoDatabase::GetMoviesByWhere(const std::string& strBaseDir, const Filte
           }
         }
 
-        path = itemUrl.ToString();
-
-        item->SetPath(path);
-        item->SetDynPath(movie.m_strFileNameAndPath);
+        item->SetPath(itemUrl.ToString());
+        item->SetDynPath(std::move(movie.m_strFileNameAndPath));
 
         item->SetOverlayImage(movie.GetPlayCount() > 0 ? CGUIListItem::ICON_OVERLAY_WATCHED
                                                        : CGUIListItem::ICON_OVERLAY_UNWATCHED);
@@ -9262,7 +9260,7 @@ bool CVideoDatabase::GetEpisodesByWhere(const std::string& strBaseDir, const Fil
           path = std::to_string(idEpisode);
         itemUrl.AppendPath(path);
         pItem->SetPath(itemUrl.ToString());
-        pItem->SetDynPath(episode.m_strFileNameAndPath);
+        pItem->SetDynPath(std::move(episode.m_strFileNameAndPath));
 
         pItem->SetOverlayImage(episode.GetPlayCount() > 0 ? CGUIListItem::ICON_OVERLAY_WATCHED
                                                           : CGUIListItem::ICON_OVERLAY_UNWATCHED);
@@ -10232,7 +10230,7 @@ bool CVideoDatabase::GetMusicVideosByWhere(const std::string &baseDir, const Fil
         std::string path = std::to_string(record->at(0).get_asInt());
         itemUrl.AppendPath(path);
         item->SetPath(itemUrl.ToString());
-        item->SetDynPath(musicvideo.m_strFileNameAndPath);
+        item->SetDynPath(std::move(musicvideo.m_strFileNameAndPath));
 
         item->SetOverlayImage(musicvideo.GetPlayCount() > 0 ? CGUIListItem::ICON_OVERLAY_WATCHED
                                                             : CGUIListItem::ICON_OVERLAY_UNWATCHED);
@@ -10384,7 +10382,7 @@ void CVideoDatabase::GetMoviesByName(const std::string& strSearch, CFileItemList
         path = StringUtils::Format("videodb://movies/titles/{}", movieId);
       else
         path = StringUtils::Format("videodb://movies/sets/{}/{}", setId, movieId);
-      pItem->SetPath(path);
+      pItem->SetPath(std::move(path));
       pItem->SetFolder(false);
       items.Add(std::move(pItem));
       m_pDS->next();
@@ -10476,7 +10474,7 @@ void CVideoDatabase::GetEpisodesByName(const std::string& strSearch, CFileItemLi
       std::string path = StringUtils::Format("videodb://tvshows/titles/{}/{}/{}",
                                              m_pDS->fv("episode.idShow").get_asInt(),
                                              m_pDS->fv(2).get_asInt(), m_pDS->fv(0).get_asInt());
-      pItem->SetPath(path);
+      pItem->SetPath(std::move(path));
       pItem->SetFolder(false);
       items.Add(std::move(pItem));
       m_pDS->next();
@@ -10578,7 +10576,7 @@ void CVideoDatabase::GetEpisodesByPlot(const std::string& strSearch, CFileItemLi
       std::string path = StringUtils::Format("videodb://tvshows/titles/{}/{}/{}",
                                              m_pDS->fv("episode.idShow").get_asInt(),
                                              m_pDS->fv(2).get_asInt(), m_pDS->fv(0).get_asInt());
-      pItem->SetPath(path);
+      pItem->SetPath(std::move(path));
       pItem->SetFolder(false);
       items.Add(std::move(pItem));
       m_pDS->next();
@@ -10623,7 +10621,7 @@ void CVideoDatabase::GetMoviesByPlot(const std::string& strSearch, CFileItemList
       auto pItem = std::make_shared<CFileItem>(m_pDS->fv(1).get_asString());
       std::string path =
           StringUtils::Format("videodb://movies/titles/{}", m_pDS->fv(0).get_asInt());
-      pItem->SetPath(path);
+      pItem->SetPath(std::move(path));
       pItem->SetFolder(false);
 
       items.Add(std::move(pItem));
@@ -13298,7 +13296,7 @@ void CVideoDatabase::GetVideoVersions(VideoDbContentType itemType,
           item->SetPath(itemUrl.ToString());
         }
 
-        item->SetDynPath(infoTag.m_strFileNameAndPath);
+        item->SetDynPath(std::move(infoTag.m_strFileNameAndPath));
 
         item->SetOverlayImage(GetPlayCount(idFile) > 0 ? CGUIListItem::ICON_OVERLAY_WATCHED
                                                        : CGUIListItem::ICON_OVERLAY_UNWATCHED);
